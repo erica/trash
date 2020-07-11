@@ -1,11 +1,14 @@
 //  Copyright © 2020 Erica Sadun. All rights reserved.
 
 import Foundation
+import Cocoa
 
 func usage() {
     print("""
     Usage: trash <files...>
     Move files to your Macintosh trash can.
+
+    -h/--help: This message
     """)
 }
 
@@ -26,12 +29,22 @@ guard prefixed.filter({ $0.hasPrefix("-h") || $0.hasPrefix("--h") }).isEmpty
 else { usage(); exit(0) }
 
 for path in paths {
-    let url = URL(fileURLWithPath: path)
-    guard FileManager.default.fileExists(atPath: url.path)
-    else { print("Skipping: \(path) does not exist"); continue }
     do {
-        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        let standardPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let process = Process()
+        let commandURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        if #available(macOS 10.13, *) { process.executableURL = commandURL }
+        else { process.launchPath = commandURL.path }
+        process.arguments = ["-e", #"tell app "Finder" to delete POSIX file "\#(standardPath)""#]
+        let output = Pipe(); process.standardOutput = output
+        let error = Pipe(); process.standardError = error
+        if #available(macOS 10.13, *) {
+            try process.run()
+        } else {
+            process.launch()
+        }
+        process.waitUntilExit()
     } catch {
-        print("Unable to remove \(path). \(error.localizedDescription)")
+        print("Error: \(error.localizedDescription)")
     }
 }
